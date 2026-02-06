@@ -63,7 +63,7 @@ export function ModelSelector({onSelect}: Props) {
 	};
 
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection='column'>
 			<Text bold>Select Model:</Text>
 			<Box marginTop={1}>
 				<SelectInput items={geminiModels} onSelect={handleSelect} />

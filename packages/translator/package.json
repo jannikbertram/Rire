@@ -1,0 +1,45 @@
+{
+	"name": "@grim/translator",
+	"version": "0.0.1",
+	"description": "AI-powered translation engine for localization files",
+	"license": "PolyForm-Noncommercial-1.0.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/src/index.d.ts",
+			"import": "./dist/src/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"test": "ava",
+		"lint": "xo"
+	},
+	"dependencies": {
+		"@google/generative-ai": "^0.24.1"
+	},
+	"devDependencies": {
+		"@ava/typescript": "^6.0.0",
+		"ava": "^6.4.1",
+		"typescript": "^5.0.3"
+	},
+	"ava": {
+		"files": [
+			"test/**/*.test.ts"
+		],
+		"typescript": {
+			"rewritePaths": {
+				"src/": "dist/src/",
+				"test/": "dist/test/"
+			},
+			"compile": "tsc"
+		}
+	}
+}

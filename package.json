@@ -1,78 +1,39 @@
 {
-	"name": "grim-t9n-cli",
-	"version": "0.0.1",
-	"description": "A CLI tool for translating react-intl files using Google Gemini",
+	"name": "grim",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Grim - AI-powered translation tools",
 	"license": "PolyForm-Noncommercial-1.0.0",
-	"keywords": [
-		"cli",
-		"translation",
-		"i18n",
-		"react-intl",
-		"gemini",
-		"ai"
-	],
-	"bin": {
-		"grim": "dist/cli.js"
-	},
 	"type": "module",
 	"engines": {
-		"node": ">=16"
+		"node": ">=24"
 	},
 	"scripts": {
-		"build": "tsc",
-		"dev": "tsc --watch",
-		"test": "xo && ava"
-	},
-	"files": [
-		"dist"
-	],
-	"dependencies": {
-		"@google/generative-ai": "^0.24.1",
-		"ink": "^6.6.0",
-		"ink-select-input": "^6.2.0",
-		"ink-spinner": "^5.0.0",
-		"ink-text-input": "^6.0.0",
-		"pastel": "^4.0.0",
-		"react": "^19.2.4",
-		"zod": "^4.3.6"
+		"build": "pnpm -r build",
+		"dev": "pnpm -r --parallel dev",
+		"test": "pnpm -r test",
+		"lint": "pnpm -r lint",
+		"clean": "pnpm -r exec rm -rf dist node_modules"
 	},
 	"devDependencies": {
-		"@ava/typescript": "^6.0.0",
-		"@sindresorhus/tsconfig": "^3.0.1",
 		"@types/node": "^25.2.0",
-		"@types/react": "^19.2.10",
 		"@vdemedes/prettier-config": "^2.0.1",
-		"ava": "^6.4.1",
 		"chalk": "^5.2.0",
 		"eslint-config-xo-react": "^0.27.0",
 		"eslint-plugin-react": "^7.32.2",
-		"eslint-plugin-react-hooks": "^4.6.0",
-		"ink-testing-library": "^3.0.0",
+		"eslint-plugin-react-hooks": "^7.0.1",
 		"prettier": "^2.8.7",
 		"ts-node": "^10.9.1",
 		"tsx": "^4.21.0",
 		"typescript": "^5.0.3",
-		"xo": "^0.54.2"
-	},
-	"ava": {
-		"files": [
-			"test/**/*.test.ts"
-		],
-		"typescript": {
-			"rewritePaths": {
-				"source/": "dist/source/",
-				"test/": "dist/test/"
-			},
-			"compile": "tsc"
-		}
+		"xo": "^1.2.3"
 	},
 	"xo": {
 		"extends": "xo-react",
-		"prettier": true,
-		"rules": {
-			"react/prop-types": "off"
-		}
+		"prettier": true
 	},
 	"prettier": "@vdemedes/prettier-config",
-	"packageManager": "pnpm@10.11.0+sha512.6540583f41cc5f628eb3d9773ecee802f4f9ef9923cc45b69890fb47991d4b092964694ec3a4f738a420c918a333062c8b925d312f42e4f0c263eb603551f977"
+	"volta": {
+		"node": "25.6.0"
+	}
 }

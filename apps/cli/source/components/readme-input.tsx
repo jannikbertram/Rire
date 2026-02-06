@@ -14,7 +14,7 @@ export function ReadmeInput({onSubmit}: Props) {
 	};
 
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection='column'>
 			<Text bold>Product context (optional):</Text>
 			<Text dimColor>
 				Enter path to a README or context file to help improve translations.
@@ -23,7 +23,7 @@ export function ReadmeInput({onSubmit}: Props) {
 			<Box marginTop={1}>
 				<Text>Path: </Text>
 				<TextInput
-					placeholder="./README.md"
+					placeholder='./README.md'
 					value={value}
 					onChange={setValue}
 					onSubmit={handleSubmit}

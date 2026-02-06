@@ -10,7 +10,7 @@ import {LlmSelector} from '../components/llm-selector.js';
 import {ModelSelector, type GeminiModel} from '../components/model-selector.js';
 import {ReadmeInput} from '../components/readme-input.js';
 import {TranslationProgress} from '../components/translation-progress.js';
-import {translateMessages} from '../services/translator.js';
+import {translateMessages} from '@grim/translator';
 
 export const args = z.tuple([
 	z.string().describe('Path to the source JSON file (e.g., en.json)'),
@@ -38,7 +38,6 @@ export default function Translate({args: commandArgs}: Props) {
 	const [model, setModel] = useState<GeminiModel>('gemini-2.0-flash');
 	const [apiKey, setApiKey] = useState<string>('');
 	const [targetLanguage, setTargetLanguage] = useState<string>('');
-	// eslint-disable-next-line react/hook-use-state
 	const [, setReadmePath] = useState<string>('');
 	const [error, setError] = useState<string>('');
 	const [progress, setProgress] = useState({current: 0, total: 0});
@@ -48,8 +47,8 @@ export default function Translate({args: commandArgs}: Props) {
 	const absolutePath = path.resolve(filePath);
 	if (!fs.existsSync(absolutePath)) {
 		return (
-			<Box flexDirection="column">
-				<Text color="red">Error: File not found: {absolutePath}</Text>
+			<Box flexDirection='column'>
+				<Text color='red'>Error: File not found: {absolutePath}</Text>
 			</Box>
 		);
 	}
@@ -122,9 +121,9 @@ export default function Translate({args: commandArgs}: Props) {
 	};
 
 	return (
-		<Box flexDirection="column" padding={1}>
+		<Box flexDirection='column' padding={1}>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">
+				<Text bold color='cyan'>
 					🌐 Grim Translator
 				</Text>
 			</Box>
@@ -157,12 +156,12 @@ export default function Translate({args: commandArgs}: Props) {
 			)}
 
 			{step === 'done' && (
-				<Box flexDirection="column">
+				<Box flexDirection='column'>
 					{error ? (
-						<Text color="red">Error: {error}</Text>
+						<Text color='red'>Error: {error}</Text>
 					) : (
 						<>
-							<Text color="green">✓ Translation complete!</Text>
+							<Text color='green'>✓ Translation complete!</Text>
 							<Text>Output: {outputPath}</Text>
 						</>
 					)}

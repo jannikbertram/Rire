@@ -1,9 +1,30 @@
 {
-	"extends": "@sindresorhus/tsconfig",
+	"$schema": "https://json.schemastore.org/tsconfig",
 	"compilerOptions": {
-		"moduleResolution": "node16",
-		"module": "Node16",
-		"outDir": "dist"
-	},
-	"include": ["source", "test"]
+		/* Environment - Modern Node.js 24+ */
+		"target": "ES2024",
+		"lib": ["ES2024"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+
+		/* Strictness & Safety */
+		"strict": true,
+		"exactOptionalPropertyTypes": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"verbatimModuleSyntax": true,
+
+		/* Interop */
+		"esModuleInterop": true,
+		"isolatedModules": true,
+		"skipLibCheck": true,
+
+		/* Output */
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true
+	}
 }

@@ -28,7 +28,7 @@ export function LanguageSelector({onSelect}: Props) {
 	};
 
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection='column'>
 			<Text bold>Select target language:</Text>
 			<Box marginTop={1}>
 				<SelectInput items={languages} onSelect={handleSelect} />

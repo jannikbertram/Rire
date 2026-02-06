@@ -1,0 +1,50 @@
+{
+	"name": "@grim/cli",
+	"version": "0.0.1",
+	"description": "A CLI tool for translating localization files using your preferred LLM",
+	"license": "PolyForm-Noncommercial-1.0.0",
+	"keywords": [
+		"cli",
+		"internationalization",
+		"i18n",
+		"localization",
+		"l10n",
+		"translation",
+		"t9n",
+		"react-intl",
+		"ai",
+		"llm",
+		"gemini",
+		"openai",
+		"anthropic"
+	],
+	"bin": {
+		"grim": "dist/source/cli.js"
+	},
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"lint": "xo"
+	},
+	"files": [
+		"dist"
+	],
+	"dependencies": {
+		"@grim/translator": "workspace:*",
+		"ink": "^6.6.0",
+		"ink-select-input": "^6.2.0",
+		"ink-spinner": "^5.0.0",
+		"ink-text-input": "^6.0.0",
+		"pastel": "^4.0.0",
+		"react": "^19.2.4",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.10",
+		"typescript": "^5.0.3"
+	}
+}

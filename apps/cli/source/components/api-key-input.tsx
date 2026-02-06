@@ -16,21 +16,21 @@ export function ApiKeyInput({provider, onSubmit}: Props) {
 		}
 	};
 
-	const providerName =
-		{
+	const providerName
+		= {
 			gemini: 'Google AI Studio',
 			openai: 'OpenAI',
 			anthropic: 'Anthropic',
 		}[provider] ?? provider;
 
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection='column'>
 			<Text bold>Enter your {providerName} API Key:</Text>
 			<Text dimColor>(Get one at https://aistudio.google.com/apikey)</Text>
 			<Box marginTop={1}>
 				<Text>API Key: </Text>
 				<TextInput
-					mask="*"
+					mask='*'
 					value={value}
 					onChange={setValue}
 					onSubmit={handleSubmit}

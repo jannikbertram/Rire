@@ -21,7 +21,7 @@ export function LlmSelector({onSelect}: Props) {
 	};
 
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection='column'>
 			<Text bold>Select LLM Provider:</Text>
 			<Box marginTop={1}>
 				<SelectInput items={items} onSelect={handleSelect} />

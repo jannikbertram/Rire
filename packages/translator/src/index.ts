@@ -10,8 +10,9 @@
 export {
 	translateMessages,
 	verifyApiKey,
-	getAvailableModels,
 	RateLimitError,
 	type TranslateOptions,
 	type Model,
+	type Provider,
 } from './translator.js';
+

@@ -20,10 +20,7 @@
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"test": "ava",
-		"lint": "xo"
-	},
-	"dependencies": {
-		"@google/generative-ai": "^0.24.1"
+		"lint": "xo --fix"
 	},
 	"devDependencies": {
 		"@ava/typescript": "^6.0.0",
@@ -41,5 +38,11 @@
 			},
 			"compile": "tsc"
 		}
+	},
+	"dependencies": {
+		"@ai-sdk/anthropic": "^3.0.37",
+		"@ai-sdk/google": "^3.0.21",
+		"@ai-sdk/openai": "^3.0.25",
+		"ai": "^6.0.73"
 	}
 }

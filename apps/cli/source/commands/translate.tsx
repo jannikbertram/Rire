@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 import React, {useState} from 'react';
 import {Box, Text} from 'ink';
-// eslint-disable-next-line n/file-extension-in-import
+import {translateMessages, type Provider} from '@grim/translator';
 import {z} from 'zod/v4';
 import {ApiKeyInput} from '../components/api-key-input.js';
 import {LanguageSelector} from '../components/language-selector.js';
@@ -10,7 +11,6 @@ import {LlmSelector} from '../components/llm-selector.js';
 import {ModelSelector} from '../components/model-selector.js';
 import {ReadmeInput} from '../components/readme-input.js';
 import {TranslationProgress} from '../components/translation-progress.js';
-import {translateMessages} from '@grim/translator';
 
 export const args = z.tuple([
 	z.string().describe('Path to the source JSON file (e.g., en.json)'),
@@ -29,12 +29,24 @@ type Step =
 	| 'translating'
 	| 'done';
 
-type LlmProvider = 'gemini';
+/** Environment variable names for API keys per provider */
+const apiKeyEnvVars: Record<Provider, string> = {
+	gemini: 'GOOGLE_API_KEY',
+	openai: 'OPENAI_API_KEY',
+	anthropic: 'ANTHROPIC_API_KEY',
+};
+
+/**
+ * Gets API key from environment variable for the given provider.
+ */
+function getApiKeyFromEnv(provider: Provider): string | undefined {
+	return process.env[apiKeyEnvVars[provider]];
+}
 
 export default function Translate({args: commandArgs}: Props) {
 	const [filePath] = commandArgs;
 	const [step, setStep] = useState<Step>('provider');
-	const [provider, setProvider] = useState<LlmProvider | undefined>(undefined);
+	const [provider, setProvider] = useState<Provider | undefined>(undefined);
 	const [model, setModel] = useState<string>('gemini-2.0-flash');
 	const [apiKey, setApiKey] = useState<string>('');
 	const [targetLanguage, setTargetLanguage] = useState<string>('');
@@ -53,9 +65,17 @@ export default function Translate({args: commandArgs}: Props) {
 		);
 	}
 
-	const handleProviderSelect = (selectedProvider: LlmProvider) => {
+	const handleProviderSelect = (selectedProvider: Provider) => {
 		setProvider(selectedProvider);
-		setStep('apiKey');
+
+		// Check if API key is already set in environment
+		const envApiKey = getApiKeyFromEnv(selectedProvider);
+		if (envApiKey) {
+			setApiKey(envApiKey);
+			setStep('model'); // Skip API key input
+		} else {
+			setStep('apiKey');
+		}
 	};
 
 	const handleApiKeySubmit = (key: string) => {
@@ -141,8 +161,8 @@ export default function Translate({args: commandArgs}: Props) {
 				<ApiKeyInput provider={provider} onSubmit={handleApiKeySubmit} />
 			)}
 
-			{step === 'model' && apiKey && (
-				<ModelSelector apiKey={apiKey} onSelect={handleModelSelect} />
+			{step === 'model' && provider && (
+				<ModelSelector provider={provider} onSelect={handleModelSelect} />
 			)}
 
 			{step === 'language' && (
@@ -160,14 +180,16 @@ export default function Translate({args: commandArgs}: Props) {
 
 			{step === 'done' && (
 				<Box flexDirection='column'>
-					{error ? (
-						<Text color='red'>Error: {error}</Text>
-					) : (
-						<>
-							<Text color='green'>✓ Translation complete!</Text>
-							<Text>Output: {outputPath}</Text>
-						</>
-					)}
+					{error
+						? (
+							<Text color='red'>Error: {error}</Text>
+						)
+						: (
+							<>
+								<Text color='green'>✓ Translation complete!</Text>
+								<Text>Output: {outputPath}</Text>
+							</>
+						)}
 				</Box>
 			)}
 		</Box>

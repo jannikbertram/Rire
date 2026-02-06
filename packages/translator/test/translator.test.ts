@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import test from 'ava';
+import type {LanguageModel} from 'ai';
 import {
 	translateMessages,
 	RateLimitError,
@@ -19,51 +20,94 @@ test.after(() => {
 	globalThis.fetch = originalFetch;
 });
 
+/** Prompt content type for mock model */
+type PromptContent = {type: string; text?: string};
+type PromptPart = {role: string; content: string | PromptContent[]};
+
 /**
- * Creates a mock GenAI client for testing.
- * @param responseHandler - Function that returns the mocked response text
+ * Extracts prompt text from the AI SDK options structure.
  */
-function createMockClient(responseHandler: (prompt: string) => string) {
-	return {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				return {
-					response: {
-						text: () => responseHandler(prompt),
-					},
-				};
-			},
-		}),
-	};
+function extractPromptText(options: unknown): string {
+	const typedOptions = options as {prompt: PromptPart[]};
+	return typedOptions.prompt
+		.map(p => {
+			if (typeof p.content === 'string') {
+				return p.content;
+			}
+
+			return p.content
+				.filter((c): c is {type: string; text: string} => 'text' in c)
+				.map(c => c.text)
+				.join('');
+		})
+		.join('');
 }
 
 /**
- * Creates a mock client that fails a specified number of times before succeeding.
+ * Creates a mock AI model for testing.
+ * Uses type coercion since we're testing translation logic, not AI SDK compliance.
+ * @param responseHandler - Function that returns the mocked response text
+ */
+function createMockModel(responseHandler: (prompt: string) => string): LanguageModel {
+	return {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate(options: unknown) {
+			const promptText = extractPromptText(options);
+			const text = responseHandler(promptText);
+			return {
+				content: [{type: 'text', text}],
+				finishReason: 'stop',
+				usage: {inputTokens: 10, outputTokens: 10},
+				rawCall: {rawPrompt: '', rawSettings: {}},
+				warnings: [],
+			};
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
+}
+
+/**
+ * Creates a mock model that fails a specified number of times before succeeding.
  * @param failuresBeforeSuccess - Number of times to fail before returning success
  * @param successResponse - The successful response text
  * @param errorMessage - The error message for failures
  */
-function createRetryMockClient(
+function createRetryMockModel(
 	failuresBeforeSuccess: number,
 	successResponse: string,
 	errorMessage: string,
 ) {
 	let callCount = 0;
-	return {
-		getGenerativeModel: () => ({
-			async generateContent() {
-				callCount++;
-				if (callCount <= failuresBeforeSuccess) {
-					throw new Error(errorMessage);
-				}
+	const model = {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate() {
+			callCount++;
+			if (callCount <= failuresBeforeSuccess) {
+				throw new Error(errorMessage);
+			}
 
-				return {
-					response: {
-						text: () => successResponse,
-					},
-				};
-			},
-		}),
+			return {
+				content: [{type: 'text', text: successResponse}],
+				finishReason: 'stop',
+				usage: {inputTokens: 10, outputTokens: 10},
+				rawCall: {rawPrompt: '', rawSettings: {}},
+				warnings: [],
+			};
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
+	return {
+		model,
 		getCallCount: () => callCount,
 	};
 }
@@ -72,10 +116,10 @@ function createRetryMockClient(
 // Basic Translation Tests
 // ============================================================================
 
-test('translateMessages translates en.json fixture using mocked Gemini API', async t => {
+test('translateMessages translates en.json fixture using mocked AI model', async t => {
 	const mockTranslatedMessages = Object.fromEntries(Object.entries(enJson).map(([key, value]) => [key, `[DE] ${value}`]));
 
-	const mockGenAiClient = createMockClient(() => JSON.stringify(mockTranslatedMessages));
+	const mockModel = createMockModel(() => JSON.stringify(mockTranslatedMessages));
 
 	const result = await translateMessages({
 		messages: enJson,
@@ -84,14 +128,14 @@ test('translateMessages translates en.json fixture using mocked Gemini API', asy
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, mockTranslatedMessages);
 });
 
 test('translateMessages handles empty messages object', async t => {
-	const mockGenAiClient = createMockClient(() => '{}');
+	const mockModel = createMockModel(() => '{}');
 
 	const result = await translateMessages({
 		messages: {},
@@ -100,7 +144,7 @@ test('translateMessages handles empty messages object', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, {});
@@ -110,7 +154,7 @@ test('translateMessages handles single message', async t => {
 	const messages = {hello: 'Hello'};
 	const translated = {hello: 'Hallo'};
 
-	const mockGenAiClient = createMockClient(() => JSON.stringify(translated));
+	const mockModel = createMockModel(() => JSON.stringify(translated));
 
 	const result = await translateMessages({
 		messages,
@@ -119,7 +163,7 @@ test('translateMessages handles single message', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, translated);
@@ -132,7 +176,7 @@ test('translateMessages handles single message', async t => {
 test('translateMessages handles malformed JSON response by falling back to original text', async t => {
 	const messages = {hello: 'Hello'};
 
-	const mockGenAiClient = createMockClient(() => 'This is not JSON');
+	const mockModel = createMockModel(() => 'This is not JSON');
 
 	const result = await translateMessages({
 		messages,
@@ -141,7 +185,7 @@ test('translateMessages handles malformed JSON response by falling back to origi
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	// Falls back to original text when no JSON is found
@@ -152,7 +196,7 @@ test('translateMessages handles invalid JSON structure by falling back to origin
 	const messages = {hello: 'Hello', world: 'World'};
 
 	// Return something that looks like JSON but is syntactically invalid
-	const mockGenAiClient = createMockClient(() => '{ "hello": "Hallo", "world": }');
+	const mockModel = createMockModel(() => '{ "hello": "Hallo", "world": }');
 
 	const result = await translateMessages({
 		messages,
@@ -161,7 +205,7 @@ test('translateMessages handles invalid JSON structure by falling back to origin
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, messages);
@@ -172,7 +216,7 @@ test('translateMessages extracts JSON from response with surrounding text', asyn
 	const translated = {hello: 'Hallo'};
 
 	// Response has text before and after the JSON
-	const mockGenAiClient = createMockClient(() => `Here is the translation:\n${JSON.stringify(translated)}\n\nHope this helps!`);
+	const mockModel = createMockModel(() => `Here is the translation:\n${JSON.stringify(translated)}\n\nHope this helps!`);
 
 	const result = await translateMessages({
 		messages,
@@ -181,7 +225,7 @@ test('translateMessages extracts JSON from response with surrounding text', asyn
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, translated);
@@ -200,26 +244,33 @@ test('translateMessages processes large message sets in batches', async t => {
 
 	let batchCount = 0;
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				batchCount++;
-				// Find the last JSON object in the prompt (the messages to translate)
-				const lastBraceIndex = prompt.lastIndexOf('{');
-				const jsonPart = prompt.slice(lastBraceIndex);
-				const batchMessages = JSON.parse(jsonPart) as Record<string, string>;
-				const translated = Object.fromEntries(Object.entries(batchMessages).map(([key, value]) => [
-					key,
-					`[DE] ${value}`,
-				]));
-				return {
-					response: {
-						text: () => JSON.stringify(translated),
-					},
-				};
-			},
-		}),
-	};
+	const mockModel = {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate(options: unknown) {
+			batchCount++;
+			const promptText = extractPromptText(options);
+			const lastBraceIndex = promptText.lastIndexOf('{');
+			const jsonPart = promptText.slice(lastBraceIndex);
+			const batchMessages = JSON.parse(jsonPart) as Record<string, string>;
+			const translated = Object.fromEntries(Object.entries(batchMessages).map(([key, value]) => [
+				key,
+				`[DE] ${value}`,
+			]));
+			return {
+				content: [{type: 'text', text: JSON.stringify(translated)}],
+				finishReason: 'stop',
+				usage: {inputTokens: 10, outputTokens: 10},
+				rawCall: {rawPrompt: '', rawSettings: {}},
+				warnings: [],
+			};
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
 
 	const result = await translateMessages({
 		messages,
@@ -228,7 +279,7 @@ test('translateMessages processes large message sets in batches', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	// Should have made 3 batches
@@ -254,7 +305,7 @@ test('translateMessages calls onProgress callback after each batch', async t => 
 
 	const progressCalls: Array<{current: number; total: number}> = [];
 
-	const mockGenAiClient = createMockClient(prompt => {
+	const mockModel = createMockModel(prompt => {
 		// Find the last JSON object in the prompt (the messages to translate)
 		const lastBraceIndex = prompt.lastIndexOf('{');
 		const jsonPart = prompt.slice(lastBraceIndex);
@@ -273,7 +324,7 @@ test('translateMessages calls onProgress callback after each batch', async t => 
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 		onProgress(current, total) {
 			progressCalls.push({current, total});
 		},
@@ -293,7 +344,7 @@ test('translateMessages does not fail when onProgress is not provided', async t 
 	const messages = {hello: 'Hello'};
 	const translated = {hello: 'Hallo'};
 
-	const mockGenAiClient = createMockClient(() => JSON.stringify(translated));
+	const mockModel = createMockModel(() => JSON.stringify(translated));
 
 	// This should not throw even without onProgress
 	const result = await translateMessages({
@@ -303,7 +354,7 @@ test('translateMessages does not fail when onProgress is not provided', async t 
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.deepEqual(result, translated);
@@ -317,18 +368,10 @@ test('translateMessages uses full language name for known language codes', async
 	const messages = {hello: 'Hello'};
 	let capturedPrompt = '';
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				capturedPrompt = prompt;
-				return {
-					response: {
-						text: () => JSON.stringify({hello: 'Bonjour'}),
-					},
-				};
-			},
-		}),
-	};
+	const mockModel = createMockModel(prompt => {
+		capturedPrompt = prompt;
+		return JSON.stringify({hello: 'Bonjour'});
+	});
 
 	await translateMessages({
 		messages,
@@ -337,7 +380,7 @@ test('translateMessages uses full language name for known language codes', async
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	// Prompt should contain "French" rather than just "fr"
@@ -349,18 +392,10 @@ test('translateMessages uses language code as-is for unknown languages', async t
 	const messages = {hello: 'Hello'};
 	let capturedPrompt = '';
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				capturedPrompt = prompt;
-				return {
-					response: {
-						text: () => JSON.stringify({hello: 'Translated'}),
-					},
-				};
-			},
-		}),
-	};
+	const mockModel = createMockModel(prompt => {
+		capturedPrompt = prompt;
+		return JSON.stringify({hello: 'Translated'});
+	});
 
 	await translateMessages({
 		messages,
@@ -369,7 +404,7 @@ test('translateMessages uses language code as-is for unknown languages', async t
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	// Prompt should contain the raw code
@@ -384,18 +419,10 @@ test('translateMessages includes context in the prompt when provided', async t =
 	const messages = {hello: 'Hello'};
 	let capturedPrompt = '';
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				capturedPrompt = prompt;
-				return {
-					response: {
-						text: () => JSON.stringify({hello: 'Hallo'}),
-					},
-				};
-			},
-		}),
-	};
+	const mockModel = createMockModel(prompt => {
+		capturedPrompt = prompt;
+		return JSON.stringify({hello: 'Hallo'});
+	});
 
 	await translateMessages({
 		messages,
@@ -404,7 +431,7 @@ test('translateMessages includes context in the prompt when provided', async t =
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.true(capturedPrompt.includes('food delivery app for restaurants'));
@@ -415,18 +442,10 @@ test('translateMessages omits context section when context is empty', async t =>
 	const messages = {hello: 'Hello'};
 	let capturedPrompt = '';
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent(prompt: string) {
-				capturedPrompt = prompt;
-				return {
-					response: {
-						text: () => JSON.stringify({hello: 'Hallo'}),
-					},
-				};
-			},
-		}),
-	};
+	const mockModel = createMockModel(prompt => {
+		capturedPrompt = prompt;
+		return JSON.stringify({hello: 'Hallo'});
+	});
 
 	await translateMessages({
 		messages,
@@ -435,7 +454,7 @@ test('translateMessages omits context section when context is empty', async t =>
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockGenAiClient,
+		aiModel: mockModel,
 	});
 
 	t.false(capturedPrompt.includes('Product context'));
@@ -450,7 +469,7 @@ test('translateMessages retries on 429 rate limit error', async t => {
 	const translated = {hello: 'Hallo'};
 
 	// Fail the first attempt, succeed on the second (within the 3 attempts limit)
-	const mockClient = createRetryMockClient(
+	const mockClient = createRetryMockModel(
 		1,
 		JSON.stringify(translated),
 		'Error 429: Too many requests',
@@ -463,7 +482,7 @@ test('translateMessages retries on 429 rate limit error', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockClient,
+		aiModel: mockClient.model,
 	});
 
 	t.deepEqual(result, translated);
@@ -475,7 +494,7 @@ test('translateMessages retries on Resource exhausted error', async t => {
 	const messages = {hello: 'Hello'};
 	const translated = {hello: 'Hallo'};
 
-	const mockClient = createRetryMockClient(
+	const mockClient = createRetryMockModel(
 		1,
 		JSON.stringify(translated),
 		'Resource exhausted. Try again later.',
@@ -488,7 +507,7 @@ test('translateMessages retries on Resource exhausted error', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockClient,
+		aiModel: mockClient.model,
 	});
 
 	t.deepEqual(result, translated);
@@ -499,7 +518,7 @@ test('translateMessages retries on quota exceeded error', async t => {
 	const messages = {hello: 'Hello'};
 	const translated = {hello: 'Hallo'};
 
-	const mockClient = createRetryMockClient(
+	const mockClient = createRetryMockModel(
 		1,
 		JSON.stringify(translated),
 		'API quota exceeded',
@@ -512,7 +531,7 @@ test('translateMessages retries on quota exceeded error', async t => {
 		apiKey: 'fake-api-key',
 		provider: 'gemini',
 		model: 'gemini-2.0-flash',
-		genAiClient: mockClient,
+		aiModel: mockClient.model,
 	});
 
 	t.deepEqual(result, translated);
@@ -523,14 +542,19 @@ test('translateMessages throws immediately for non-rate-limit errors', async t =
 	const messages = {hello: 'Hello'};
 
 	let callCount = 0;
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent() {
-				callCount++;
-				throw new Error('Authentication failed');
-			},
-		}),
-	};
+	const mockModel = {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate() {
+			callCount++;
+			throw new Error('Authentication failed');
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
 
 	await t.throwsAsync(
 		async () =>
@@ -541,9 +565,9 @@ test('translateMessages throws immediately for non-rate-limit errors', async t =
 				apiKey: 'fake-api-key',
 				provider: 'gemini',
 				model: 'gemini-2.0-flash',
-				genAiClient: mockGenAiClient,
+				aiModel: mockModel,
 			}),
-		{message: 'Authentication failed'},
+		{message: /Authentication failed/},
 	);
 
 	// Should only be called once, no retry
@@ -554,14 +578,19 @@ test('translateMessages throws RateLimitError after max retries exceeded', async
 	const messages = {hello: 'Hello'};
 
 	let callCount = 0;
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent() {
-				callCount++;
-				throw new Error('Error 429: Rate limited');
-			},
-		}),
-	};
+	const mockModel = {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate() {
+			callCount++;
+			throw new Error('Error 429: Rate limited');
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
 
 	const error = await t.throwsAsync(async () =>
 		translateMessages({
@@ -571,7 +600,7 @@ test('translateMessages throws RateLimitError after max retries exceeded', async
 			apiKey: 'fake-api-key',
 			provider: 'gemini',
 			model: 'gemini-2.0-flash',
-			genAiClient: mockGenAiClient,
+			aiModel: mockModel,
 		}));
 
 	// Should throw RateLimitError with specific message
@@ -585,13 +614,18 @@ test('translateMessages throws RateLimitError after max retries exceeded', async
 test('translateMessages RateLimitError has correct name property', async t => {
 	const messages = {hello: 'Hello'};
 
-	const mockGenAiClient = {
-		getGenerativeModel: () => ({
-			async generateContent() {
-				throw new Error('Resource exhausted');
-			},
-		}),
-	};
+	const mockModel = {
+		specificationVersion: 'v2',
+		provider: 'mock',
+		modelId: 'mock-model',
+		supportedUrls: {},
+		async doGenerate() {
+			throw new Error('Resource exhausted');
+		},
+		async doStream() {
+			throw new Error('Not implemented');
+		},
+	} as unknown as LanguageModel;
 
 	const error = await t.throwsAsync(async () =>
 		translateMessages({
@@ -601,7 +635,7 @@ test('translateMessages RateLimitError has correct name property', async t => {
 			apiKey: 'fake-api-key',
 			provider: 'gemini',
 			model: 'gemini-2.0-flash',
-			genAiClient: mockGenAiClient,
+			aiModel: mockModel,
 		}));
 
 	// Verify the error name property for proper identification
@@ -609,104 +643,156 @@ test('translateMessages RateLimitError has correct name property', async t => {
 });
 
 // ============================================================================
-// Model Configuration Tests
-// ============================================================================
-
-test('translateMessages passes configured model to the AI client', async t => {
-	const messages = {hello: 'Hello'};
-	let capturedModelName = '';
-
-	const mockGenAiClient = {
-		getGenerativeModel(options: {model: string}) {
-			capturedModelName = options.model;
-			return {
-				async generateContent() {
-					return {
-						response: {
-							text: () => JSON.stringify({hello: 'Hallo'}),
-						},
-					};
-				},
-			};
-		},
-	};
-
-	await translateMessages({
-		messages,
-		targetLanguage: 'de',
-		context: '',
-		apiKey: 'fake-api-key',
-		provider: 'gemini',
-		model: 'gemini-1.5-pro',
-		genAiClient: mockGenAiClient,
-	});
-
-	t.is(capturedModelName, 'gemini-1.5-pro');
-});
-
-// ============================================================================
 // API Verification & Model Fetching Tests
 // ============================================================================
 
-test('verifyApiKey returns true for valid key', async t => {
-	globalThis.fetch = async (url) => {
-		if (url.toString().includes('key=valid-key')) {
-			return {
+test('verifyApiKey returns true for valid Gemini key', async t => {
+	globalThis.fetch = async url => {
+		const urlString = typeof url === 'string' ? url : (url instanceof URL ? url.href : url.url);
+		if (urlString.includes('key=valid-key')) {
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+			const response: Response = {
 				status: 200,
 				ok: true,
 				json: async () => ({}),
 			} as Response;
+			return response;
 		}
 
-		return {
-			status: 400,
-			ok: false,
-		} as Response;
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {status: 400, ok: false} as Response;
+		return response;
 	};
 
-	const isValid = await verifyApiKey('valid-key');
+	const isValid = await verifyApiKey('valid-key', 'gemini');
 	t.true(isValid);
 });
 
-test('verifyApiKey returns false for invalid key', async t => {
-	globalThis.fetch = async () => ({
-		status: 400,
-		ok: false,
-	} as Response);
+test('verifyApiKey returns false for invalid Gemini key', async t => {
+	globalThis.fetch = async () => {
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {status: 400, ok: false} as Response;
+		return response;
+	};
 
-	const isValid = await verifyApiKey('invalid-key');
+	const isValid = await verifyApiKey('invalid-key', 'gemini');
 	t.false(isValid);
 });
 
-test('getAvailableModels returns list of models', async t => {
-	globalThis.fetch = async () => ({
-		status: 200,
-		ok: true,
-		json: async () => ({
-			models: [
-				{
-					name: 'models/gemini-pro',
-					displayName: 'Gemini Pro',
-					supportedGenerationMethods: ['generateContent'],
-				},
-				{
-					name: 'models/gemini-flash',
-					displayName: 'Gemini Flash',
-					supportedGenerationMethods: ['generateContent'],
-				},
-				{
-					name: 'models/embedding-001',
-					displayName: 'Embedding',
-					supportedGenerationMethods: ['embedContent'],
-				},
-			],
-		}),
-	} as Response);
+test('verifyApiKey returns true for valid OpenAI key', async t => {
+	globalThis.fetch = async (url, options) => {
+		const urlString = typeof url === 'string' ? url : (url instanceof URL ? url.href : url.url);
+		const fetchOptions: {headers: {authorization: string}} = options as {headers: {authorization: string}};
+		if (urlString.includes('openai.com') && fetchOptions.headers.authorization === 'Bearer valid-key') {
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+			const response: Response = {
+				status: 200,
+				ok: true,
+				json: async () => ({data: []}),
+			} as Response;
+			return response;
+		}
 
-	const models = await getAvailableModels('valid-key');
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {status: 401, ok: false} as Response;
+		return response;
+	};
+
+	const isValid = await verifyApiKey('valid-key', 'openai');
+	t.true(isValid);
+});
+
+test('verifyApiKey returns true for valid Anthropic key', async t => {
+	globalThis.fetch = async (url, options) => {
+		const urlString = typeof url === 'string' ? url : (url instanceof URL ? url.href : url.url);
+		const fetchOptions: {headers: {'x-api-key': string}} = options as {headers: {'x-api-key': string}};
+		if (urlString.includes('anthropic.com') && fetchOptions.headers['x-api-key'] === 'valid-key') {
+			// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+			const response: Response = {
+				status: 200,
+				ok: true,
+				json: async () => ({}),
+			} as Response;
+			return response;
+		}
+
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {status: 401, ok: false} as Response;
+		return response;
+	};
+
+	const isValid = await verifyApiKey('valid-key', 'anthropic');
+	t.true(isValid);
+});
+
+test('getAvailableModels returns list of Gemini models', async t => {
+	globalThis.fetch = async () => {
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {
+			status: 200,
+			ok: true,
+			json: async () => ({
+				models: [
+					{
+						name: 'models/gemini-pro',
+						displayName: 'Gemini Pro',
+						supportedGenerationMethods: ['generateContent'],
+					},
+					{
+						name: 'models/gemini-flash',
+						displayName: 'Gemini Flash',
+						supportedGenerationMethods: ['generateContent'],
+					},
+					{
+						name: 'models/embedding-001',
+						displayName: 'Embedding',
+						supportedGenerationMethods: ['embedContent'],
+					},
+				],
+			}),
+		} as Response;
+		return response;
+	};
+
+	const models = await getAvailableModels('valid-key', 'gemini');
 	t.is(models.length, 2);
 	t.deepEqual(models[0], {value: 'gemini-pro', label: 'Gemini Pro'});
 	t.deepEqual(models[1], {value: 'gemini-flash', label: 'Gemini Flash'});
+});
+
+test('getAvailableModels returns list of OpenAI models', async t => {
+	globalThis.fetch = async () => {
+		// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+		const response: Response = {
+			status: 200,
+			ok: true,
+			json: async () => ({
+				data: [
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					{id: 'gpt-4o', owned_by: 'openai'},
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					{id: 'gpt-4-turbo', owned_by: 'openai'},
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					{id: 'gpt-3.5-turbo', owned_by: 'openai'},
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					{id: 'dall-e-3', owned_by: 'openai'},
+				],
+			}),
+		} as Response;
+		return response;
+	};
+
+	const models = await getAvailableModels('valid-key', 'openai');
+	t.is(models.length, 3); // Only GPT models, not DALL-E
+	t.true(models.some(m => m.value === 'gpt-4o'));
+	t.true(models.some(m => m.value === 'gpt-4-turbo'));
+	t.true(models.some(m => m.value === 'gpt-3.5-turbo'));
+});
+
+test('getAvailableModels returns static list for Anthropic', async t => {
+	const models = await getAvailableModels('valid-key', 'anthropic');
+	t.true(models.length > 0);
+	t.true(models.some(m => m.value.includes('claude')));
 });
 
 test('getAvailableModels handles empty response or error', async t => {
@@ -714,6 +800,6 @@ test('getAvailableModels handles empty response or error', async t => {
 		throw new Error('Network error');
 	};
 
-	const models = await getAvailableModels('valid-key');
+	const models = await getAvailableModels('valid-key', 'gemini');
 	t.deepEqual(models, []);
 });

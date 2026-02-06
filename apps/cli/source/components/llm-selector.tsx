@@ -1,22 +1,23 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 import SelectInput from 'ink-select-input';
-
-type LlmProvider = 'gemini';
+import type {Provider} from '@grim/translator';
 
 type Props = {
-	readonly onSelect: (provider: LlmProvider) => void;
+	readonly onSelect: (provider: Provider) => void;
 };
 
 const items = [
-	{label: '🤖 Google Gemini', value: 'gemini' as LlmProvider},
-	// Future providers can be added here:
-	// {label: '🧠 OpenAI GPT-4', value: 'openai' as LlmProvider},
-	// {label: '🔮 Anthropic Claude', value: 'anthropic' as LlmProvider},
+	{label: '🤖 Google Gemini', value: 'gemini' as Provider},
+	{label: '🧠 OpenAI ChatGPT', value: 'openai' as Provider},
+	{label: '🔮 Anthropic Claude', value: 'anthropic' as Provider},
 ];
 
+/**
+ * Component for selecting an LLM provider.
+ */
 export function LlmSelector({onSelect}: Props) {
-	const handleSelect = (item: {label: string; value: LlmProvider}) => {
+	const handleSelect = (item: {label: string; value: Provider}) => {
 		onSelect(item.value);
 	};
 

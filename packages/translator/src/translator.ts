@@ -1,4 +1,12 @@
-import {GoogleGenerativeAI} from '@google/generative-ai';
+import {generateText, type LanguageModel} from 'ai';
+import {createGoogleGenerativeAI} from '@ai-sdk/google';
+import {createOpenAI} from '@ai-sdk/openai';
+import {createAnthropic} from '@ai-sdk/anthropic';
+
+/**
+ * Supported LLM providers for translation.
+ */
+export type Provider = 'gemini' | 'openai' | 'anthropic';
 
 /**
  * Error thrown when rate limit retries are exhausted.
@@ -8,54 +16,6 @@ export class RateLimitError extends Error {
 		super(message);
 		this.name = 'RateLimitError';
 	}
-}
-
-/**
- * Executes an async function with exponential backoff retry logic.
- * Only retries on rate-limiting errors (429, Resource exhausted, quota).
- * @param function_ - The async function to execute
- * @param maxAttempts - Maximum number of total attempts (default: 3)
- * @param baseDelayMs - Base delay in milliseconds for exponential backoff (default: 2000)
- * @returns The result of the function if successful
- * @throws RateLimitError if rate limit errors persist after all retry attempts
- * @throws The original error immediately if it's a non-rate-limiting error
- */
-async function withRetry<T>(
-	function_: () => Promise<T>,
-	maxAttempts = 3,
-	baseDelayMs = 2000,
-): Promise<T> {
-	for (let attempt = 0; attempt < maxAttempts; attempt++) {
-		try {
-			// eslint-disable-next-line no-await-in-loop
-			return await function_();
-		} catch (error) {
-			const isRateLimited = error instanceof Error
-				&& (error.message.includes('429')
-					|| error.message.includes('Resource exhausted')
-					|| error.message.includes('quota'));
-
-			// Non-rate-limit errors are thrown immediately
-			if (!isRateLimited) {
-				throw error;
-			}
-
-			// If this was the last attempt, throw a specific rate limit error
-			if (attempt === maxAttempts - 1) {
-				throw new RateLimitError();
-			}
-
-			// Exponential backoff: 2s, 4s, 8s
-			const delay = baseDelayMs * (2 ** attempt);
-			// eslint-disable-next-line no-await-in-loop
-			await new Promise<void>(resolve => {
-				setTimeout(resolve, delay);
-			});
-		}
-	}
-
-	// This should never be reached due to the loop logic, but TypeScript needs it
-	throw new RateLimitError();
 }
 
 /**
@@ -90,13 +50,13 @@ export type TranslateOptions = {
 	apiKey: string;
 
 	/**
-	 * The translation provider to use. Currently only 'gemini' is supported.
+	 * The translation provider to use.
 	 */
-	provider: 'gemini';
+	provider: Provider;
 
 	/**
 	 * The specific model to use for translation.
-	 * @example 'gemini-2.0-flash', 'gemini-1.5-pro'
+	 * @example 'gemini-2.0-flash', 'gpt-4o', 'claude-sonnet-4-20250514'
 	 */
 	model: string;
 
@@ -109,19 +69,11 @@ export type TranslateOptions = {
 	onProgress?: (current: number, total: number) => void;
 
 	/**
-	 * Optional custom AI client for testing or alternative implementations.
-	 * When provided, bypasses the default GoogleGenerativeAI client.
+	 * Optional custom AI model for testing or alternative implementations.
+	 * When provided, bypasses the default provider-based model creation.
 	 * @internal Primarily used for testing with mock implementations.
 	 */
-	genAiClient?: {
-		getGenerativeModel: (options: {model: string}) => {
-			generateContent: (prompt: string) => Promise<{
-				response: {
-					text: () => string;
-				};
-			}>;
-		};
-	};
+	aiModel?: LanguageModel;
 };
 
 /**
@@ -145,33 +97,84 @@ const languageNames: Record<string, string> = {
 };
 
 /**
- * Verifies that the provided API key is valid.
+ * Creates an AI model instance for the specified provider.
+ * @param provider - The LLM provider to use
+ * @param modelName - The model identifier
+ * @param apiKey - The API key for the provider
+ * @returns A language model instance
+ */
+function createModel(provider: Provider, modelName: string, apiKey: string): LanguageModel {
+	switch (provider) {
+		case 'gemini': {
+			const google = createGoogleGenerativeAI({apiKey});
+			return google(modelName);
+		}
+
+		case 'openai': {
+			const openai = createOpenAI({apiKey});
+			return openai(modelName);
+		}
+
+		case 'anthropic': {
+			const anthropic = createAnthropic({apiKey});
+			return anthropic(modelName);
+		}
+	}
+}
+
+/**
+ * Verifies that the provided API key is valid for the specified provider.
  *
- * @param apiKey - The Google Gemini API key to verify.
+ * @param apiKey - The API key to verify.
+ * @param provider - The provider to verify the key for.
  * @returns A promise that resolves to true if the key is valid, false otherwise.
  */
-export async function verifyApiKey(apiKey: string): Promise<boolean> {
+export async function verifyApiKey(apiKey: string, provider: Provider): Promise<boolean> {
 	if (!apiKey) {
 		return false;
 	}
 
 	try {
-		// Try to list models to verify the key
-		const response = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-		);
-		return response.status === 200;
+		switch (provider) {
+			case 'gemini': {
+				const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+				return response.status === 200;
+			}
+
+			case 'openai': {
+				const response = await fetch('https://api.openai.com/v1/models', {
+					headers: {authorization: `Bearer ${apiKey}`},
+				});
+				return response.status === 200;
+			}
+
+			case 'anthropic': {
+				// Anthropic doesn't have a simple models endpoint, so we make a minimal request
+				const response = await fetch('https://api.anthropic.com/v1/messages', {
+					method: 'POST',
+					headers: {
+						'x-api-key': apiKey,
+						'anthropic-version': '2023-06-01',
+						'content-type': 'application/json',
+					},
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					body: JSON.stringify({model: 'claude-3-haiku-20240307', max_tokens: 1, messages: [{role: 'user', content: 'hi'}]}),
+				});
+				// 200 = success, 400 = bad request (but valid key), 401 = invalid key
+				return response.status !== 401;
+			}
+		}
 	} catch {
 		return false;
 	}
 }
 
 /**
- * Represents a Gemini model available for use.
+ * Represents a model available for use.
  */
 export type Model = {
 	/**
-	 * The model identifier (e.g., 'gemini-pro').
+	 * The model identifier (e.g., 'gemini-pro', 'gpt-4o').
 	 */
 	value: string;
 	/**
@@ -179,62 +182,6 @@ export type Model = {
 	 */
 	label: string;
 };
-
-/**
- * Fetches the list of available Gemini models for the provided API key.
- *
- * @param apiKey - The Google Gemini API key.
- * @returns A promise that resolves to an array of available models.
- */
-export async function getAvailableModels(apiKey: string): Promise<Model[]> {
-	try {
-		const response = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-		);
-
-		if (!response.ok) {
-			return [];
-		}
-
-		const data = (await response.json()) as {
-			models: Array<{
-				name: string;
-				displayName: string;
-				supportedGenerationMethods: string[];
-			}>;
-		};
-
-		// Filter for standard Gemini text generation models only:
-		// - Must support generateContent
-		// - Must start with "models/gemini-" (excludes gemma, nano-banana, deep-research, etc.)
-		// - Exclude specialized models (image, tts, robotics, computer-use, experimental)
-		const excludePatterns = [
-			'imagen',       // Image generation
-			'-image',       // Image variants
-			'-tts',         // Text-to-speech
-			'robotics',     // Robotics models
-			'computer-use', // Computer use models
-			'-exp-',        // Experimental models
-		];
-
-		return data.models
-			.filter(model => {
-				const name = model.name.toLowerCase();
-				return (
-					model.supportedGenerationMethods.includes('generateContent')
-					&& name.startsWith('models/gemini-')
-					&& !excludePatterns.some(pattern => name.includes(pattern))
-				);
-			})
-			.map(model => ({
-				value: model.name.replace('models/', ''),
-				label: model.displayName,
-			}))
-			.sort((a, b) => b.value.localeCompare(a.value)); // Sort newest first (heuristic)
-	} catch {
-		return [];
-	}
-}
 
 /**
  * Translates a collection of messages from English to a target language using AI.
@@ -264,19 +211,17 @@ export async function getAvailableModels(apiKey: string): Promise<Model[]> {
  * - HTML tags and markdown formatting are maintained
  * - If JSON parsing fails for a batch, original text is returned as fallback
  */
-export async function translateMessages(options: TranslateOptions): Promise<Record<string, string>> {
-	const {
+export async function translateMessages({
 		messages,
 		targetLanguage,
 		context,
 		apiKey,
+		provider,
 		model: modelName,
 		onProgress,
-		genAiClient,
-	} = options;
-
-	const genAi = genAiClient ?? new GoogleGenerativeAI(apiKey);
-	const model = genAi.getGenerativeModel({model: modelName});
+		aiModel,
+	}: TranslateOptions): Promise<Record<string, string>> {
+	const model = aiModel ?? createModel(provider, modelName, apiKey);
 
 	const entries = Object.entries(messages);
 	const total = entries.length;
@@ -314,8 +259,8 @@ Messages to translate:
 ${JSON.stringify(Object.fromEntries(batch), null, 2)}`;
 
 		// eslint-disable-next-line no-await-in-loop
-		const result = await withRetry(async () => model.generateContent(prompt));
-		const response = result.response.text();
+		const result = await generateText({model, prompt, maxRetries: 0});
+		const response = result.text;
 
 		// Extract JSON from response
 		const jsonMatch = /{[\s\S]*}/.exec(response);

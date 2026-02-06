@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// eslint-disable-next-line import-x/no-unassigned-import
+import 'dotenv/config';
 import Pastel from 'pastel';
 
 const app = new Pastel({

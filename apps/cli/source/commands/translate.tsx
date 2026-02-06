@@ -21,6 +21,10 @@ export const options = z.object({
 	output: z.string().optional().describe('Output file path (defaults to {language}.json in the source directory)'),
 	context: z.string().optional().describe('Direct context string to help improve translation quality'),
 	contextPath: z.string().optional().describe('Path to a file containing context (e.g., README.md)'),
+	provider: z.enum(['gemini', 'openai', 'anthropic']).optional().describe('LLM provider to use'),
+	model: z.string().optional().describe('Model to use for translation (e.g., gemini-2.0-flash)'),
+	apiKey: z.string().optional().describe('API key for the provider'),
+	language: z.string().optional().describe('Target language code (e.g., de, fr, es)'),
 });
 
 type Props = {
@@ -54,15 +58,33 @@ function getApiKeyFromEnv(provider: Provider): string | undefined {
 
 export default function Translate({args: commandArgs, options: commandOptions}: Props) {
 	const [filePath] = commandArgs;
-	const [step, setStep] = useState<Step>('provider');
-	const [provider, setProvider] = useState<Provider | undefined>(undefined);
-	const [model, setModel] = useState<string>('gemini-2.0-flash');
-	const [apiKey, setApiKey] = useState<string>('');
-	const [targetLanguage, setTargetLanguage] = useState<string>('');
+
+	// Determine initial state based on CLI options
+	const initialProvider = commandOptions.provider as Provider | undefined;
+	const initialApiKey = commandOptions.apiKey ?? (initialProvider ? getApiKeyFromEnv(initialProvider) : undefined);
+	const initialModel = commandOptions.model;
+	const initialLanguage = commandOptions.language;
+
+	// Determine which step to start on based on provided options
+	const getInitialStep = (): Step => {
+		if (!initialProvider) return 'provider';
+		if (!initialApiKey) return 'apiKey';
+		if (!initialModel) return 'model';
+		if (!initialLanguage) return 'language';
+		// All required options provided, we'll start translation in useEffect-like pattern
+		return 'translating';
+	};
+
+	const [step, setStep] = useState<Step>(getInitialStep);
+	const [provider, setProvider] = useState<Provider | undefined>(initialProvider);
+	const [model, setModel] = useState<string>(initialModel ?? 'gemini-2.0-flash');
+	const [apiKey, setApiKey] = useState<string>(initialApiKey ?? '');
+	const [targetLanguage, setTargetLanguage] = useState<string>(initialLanguage ?? '');
 	const [error, setError] = useState<string>('');
 	const [progress, setProgress] = useState({current: 0, total: 0});
 	const [outputPath, setOutputPath] = useState<string>('');
 	const [contextContent, setContextContent] = useState<string>('');
+	const [hasStarted, setHasStarted] = useState(false);
 
 	// Validate file exists
 	const absolutePath = path.resolve(filePath);
@@ -72,6 +94,51 @@ export default function Translate({args: commandArgs, options: commandOptions}: 
 				<Text color='red'>Error: File not found: {absolutePath}</Text>
 			</Box>
 		);
+	}
+
+	// Auto-start translation when all CLI options are provided
+	if (step === 'translating' && !hasStarted) {
+		// Get context from CLI options
+		let context = commandOptions.context ?? '';
+		if (commandOptions.contextPath && fs.existsSync(commandOptions.contextPath)) {
+			context = fs.readFileSync(commandOptions.contextPath, 'utf8');
+		}
+
+		// Determine output path
+		const dirName = path.dirname(absolutePath);
+		const outPath = commandOptions.output
+			? path.resolve(commandOptions.output)
+			: path.join(dirName, `${targetLanguage}.json`);
+
+		setHasStarted(true);
+		setOutputPath(outPath);
+		setContextContent(context);
+
+		// Start translation immediately
+		void (async () => {
+			try {
+				const sourceContent = fs.readFileSync(absolutePath, 'utf8');
+				const messages = JSON.parse(sourceContent) as Record<string, string>;
+
+				const translated = await translateMessages({
+					messages,
+					targetLanguage,
+					context,
+					apiKey,
+					provider: provider!,
+					model,
+					onProgress(current: number, total: number) {
+						setProgress({current, total});
+					},
+				});
+
+				fs.writeFileSync(outPath, JSON.stringify(translated, null, 2));
+				setStep('done');
+			} catch (error_) {
+				setError(error_ instanceof Error ? error_.message : 'Unknown error');
+				setStep('done');
+			}
+		})();
 	}
 
 	const handleProviderSelect = (selectedProvider: Provider) => {

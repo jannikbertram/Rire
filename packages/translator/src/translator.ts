@@ -3,6 +3,8 @@ import {createGoogleGenerativeAI} from '@ai-sdk/google';
 import {createOpenAI} from '@ai-sdk/openai';
 import {createAnthropic} from '@ai-sdk/anthropic';
 import {z} from 'zod';
+import {TRANSLATION_BATCH_SIZE} from './consts.js';
+import {buildSystemPrompt, buildTranslationPrompt} from './prompts.js';
 
 /**
  * Supported LLM providers for translation.
@@ -77,25 +79,6 @@ export type TranslateOptions = {
 	aiModel?: LanguageModel;
 };
 
-/**
- * Mapping of language codes to human-readable language names.
- * Used to provide better context to the AI model in translation prompts.
- */
-const languageNames: Record<string, string> = {
-	de: 'German',
-	fr: 'French',
-	es: 'Spanish',
-	it: 'Italian',
-	pt: 'Portuguese',
-	nl: 'Dutch',
-	pl: 'Polish',
-	ja: 'Japanese',
-	zh: 'Chinese (Simplified)',
-	ko: 'Korean',
-	ru: 'Russian',
-	tr: 'Turkish',
-	ar: 'Arabic',
-};
 
 /**
  * Creates an AI model instance for the specified provider.
@@ -227,35 +210,13 @@ export async function translateMessages({
 	const total = entries.length;
 	const translated: Record<string, string> = {};
 
-	const targetLangName = languageNames[targetLanguage] ?? targetLanguage;
+	const systemPrompt = buildSystemPrompt(targetLanguage, context);
 
-	// Build system context
-	let systemPrompt = `You are a professional translator specializing in software localization. 
-Translate the following UI text from English to ${targetLangName}.
-
-Important guidelines:
-- Preserve any placeholders like {name}, {count}, {{variable}}, etc.
-- Keep the same tone and formality level
-- Use natural, idiomatic expressions in the target language
-- Maintain any HTML tags or markdown formatting
-- Do not add or remove content, only translate`;
-
-	if (context) {
-		systemPrompt += `\n\nProduct context for better translations:\n${context}`;
-	}
-
-	// Process in batches for efficiency
-	const batchSize = 10;
 	let processed = 0;
+	for (let i = 0; i < entries.length; i += TRANSLATION_BATCH_SIZE) {
+		const batch = entries.slice(i, i + TRANSLATION_BATCH_SIZE);
 
-	for (let i = 0; i < entries.length; i += batchSize) {
-		const batch = entries.slice(i, i + batchSize);
-
-		const prompt = `${systemPrompt}
-
-Translate each of the following messages:
-
-${JSON.stringify(Object.fromEntries(batch), null, 2)}`;
+		const prompt = buildTranslationPrompt(systemPrompt, batch);
 
 		// Schema for structured output: record of string keys to string values
 		const translationSchema = z.record(z.string(), z.string().describe('Translated text'));

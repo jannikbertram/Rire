@@ -11,3 +11,5 @@ trigger: always_on
 
 # Code style
 - The code needs to conform to the latest version of XO (npm install xo) configuration. It can be tested using "pnpm lint".
+- Constants should be defined and documented in a consts.ts file
+- Functions to generate LLM prompts should be defined in a prompts.ts file

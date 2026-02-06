@@ -1,5 +1,5 @@
 {
-	"name": "@grim-t9n/cli",
+	"name": "@grim/cli",
 	"version": "0.0.1",
 	"description": "A CLI tool for translating localization files using your preferred LLM",
 	"license": "PolyForm-Noncommercial-1.0.0",
@@ -34,7 +34,7 @@
 		"dist"
 	],
 	"dependencies": {
-		"@grim-t9n/core": "workspace:*",
+		"@grim/translator": "workspace:*",
 		"ink": "^6.6.0",
 		"ink-select-input": "^6.2.0",
 		"ink-spinner": "^5.0.0",

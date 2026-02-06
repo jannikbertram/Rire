@@ -1,7 +1,7 @@
 {
-	"name": "@grim-t9n/core",
+	"name": "@grim/translator",
 	"version": "0.0.1",
-	"description": "Core translation functions for grim-t9n",
+	"description": "AI-powered translation engine for localization files",
 	"license": "PolyForm-Noncommercial-1.0.0",
 	"type": "module",
 	"exports": {

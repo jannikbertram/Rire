@@ -1,8 +1,8 @@
 {
-	"name": "grim-t9n",
+	"name": "grim",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Grim T9N - AI-powered translation tools",
+	"description": "Grim - AI-powered translation tools",
 	"license": "PolyForm-Noncommercial-1.0.0",
 	"type": "module",
 	"engines": {

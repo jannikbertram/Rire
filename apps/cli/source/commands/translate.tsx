@@ -10,7 +10,7 @@ import {LlmSelector} from '../components/llm-selector.js';
 import {ModelSelector, type GeminiModel} from '../components/model-selector.js';
 import {ReadmeInput} from '../components/readme-input.js';
 import {TranslationProgress} from '../components/translation-progress.js';
-import {translateMessages} from '@grim-t9n/core';
+import {translateMessages} from '@grim/translator';
 
 export const args = z.tuple([
 	z.string().describe('Path to the source JSON file (e.g., en.json)'),

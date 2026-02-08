@@ -13,6 +13,7 @@ export {
 	RateLimitError,
 	reviseMessages,
 	adviseWebsite,
+	adviseWebsiteStream,
 	type TranslateOptions,
 	type Model,
 	type Provider,

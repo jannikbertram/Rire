@@ -1,4 +1,4 @@
-import {adviseWebsite, type RevisionErrorType} from '@jive/core';
+import {adviseWebsiteStream, type RevisionErrorType} from '@jive/core';
 
 export async function POST(request: Request) {
 	const apiKey = process.env['GOOGLE_API_KEY'];
@@ -24,17 +24,28 @@ export async function POST(request: Request) {
 		return Response.json({error: 'Invalid URL provided'}, {status: 400});
 	}
 
-	try {
-		const suggestions = await adviseWebsite({
-			websiteUrl: url,
-			errorTypes: ['grammar', 'wording', 'phrasing'],
-			apiKey,
-			model: 'gemini-3-flash-preview',
-		});
+	const encoder = new TextEncoder();
+	const stream = new ReadableStream({
+		async start(controller) {
+			try {
+				for await (const suggestion of adviseWebsiteStream({
+					websiteUrl: url,
+					errorTypes: ['grammar', 'wording', 'phrasing'],
+					apiKey,
+					model: 'gemini-3-flash-preview',
+				})) {
+					controller.enqueue(encoder.encode(JSON.stringify(suggestion) + '\n'));
+				}
+			} catch (error) {
+				const message = error instanceof Error ? error.message : 'Unknown error';
+				controller.enqueue(encoder.encode(JSON.stringify({error: message}) + '\n'));
+			}
 
-		return Response.json({suggestions});
-	} catch (error) {
-		const message = error instanceof Error ? error.message : 'Unknown error';
-		return Response.json({error: message}, {status: 500});
-	}
+			controller.close();
+		},
+	});
+
+	return new Response(stream, {
+		headers: {'Content-Type': 'application/x-ndjson'},
+	});
 }

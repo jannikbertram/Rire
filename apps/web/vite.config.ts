@@ -27,8 +27,26 @@ function apiPlugin(): Plugin {
 				});
 
 				const response = await POST(request);
-				res.writeHead(response.status, {'Content-Type': 'application/json'});
-				res.end(await response.text());
+				const contentType = response.headers.get('Content-Type') ?? 'application/json';
+				res.writeHead(response.status, {'Content-Type': contentType});
+
+				if (response.body) {
+					const reader = response.body.getReader();
+					const pump = async () => {
+						const {done, value} = await reader.read();
+						if (done) {
+							res.end();
+							return;
+						}
+
+						res.write(value);
+						await pump();
+					};
+
+					await pump();
+				} else {
+					res.end(await response.text());
+				}
 			});
 		},
 	};

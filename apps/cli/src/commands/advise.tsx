@@ -38,7 +38,7 @@ type Step =
 	| 'done';
 
 function getApiKeyFromEnv(): string | undefined {
-	return process.env['GOOGLE_API_KEY']; // eslint-disable-line n/prefer-global/process
+	return process.env['GOOGLE_API_KEY'];
 }
 
 function parseErrorTypes(errorTypesOption: string | undefined): RevisionErrorType[] | undefined {
@@ -67,7 +67,7 @@ function normalizeUrl(url: string): string {
  * Generates a markdown report from the suggestions.
  */
 function escapeCell(text: string): string {
-	return text.replaceAll('|', '\\|').replaceAll('\n', ' ');
+	return text.replaceAll('|', String.raw`\|`).replaceAll('\n', ' ');
 }
 
 function generateMarkdownReport(

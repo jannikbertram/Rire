@@ -5,7 +5,6 @@ import test from 'ava';
 import type {LanguageModel} from 'ai';
 import {
 	translateMessages,
-	RateLimitError,
 	verifyApiKey,
 } from '../src/index.js';
 
@@ -49,7 +48,7 @@ function extractPromptText(options: unknown): string {
  */
 function createMockModel(responseHandler: (prompt: string) => string): LanguageModel {
 	return {
-		specificationVersion: 'v2',
+		specificationVersion: 'v3',
 		provider: 'mock',
 		modelId: 'mock-model',
 		supportedUrls: {},
@@ -58,8 +57,11 @@ function createMockModel(responseHandler: (prompt: string) => string): LanguageM
 			const text = responseHandler(promptText);
 			return {
 				content: [{type: 'text', text}],
-				finishReason: 'stop',
-				usage: {inputTokens: 10, outputTokens: 10},
+				finishReason: {unified: 'stop', raw: undefined},
+				usage: {
+					inputTokens: {total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined},
+					outputTokens: {total: 10, text: undefined, reasoning: undefined},
+				},
 				rawCall: {rawPrompt: '', rawSettings: {}},
 				warnings: [],
 			};
@@ -83,7 +85,7 @@ function createRetryMockModel(
 ) {
 	let callCount = 0;
 	const model = {
-		specificationVersion: 'v2',
+		specificationVersion: 'v3',
 		provider: 'mock',
 		modelId: 'mock-model',
 		supportedUrls: {},
@@ -95,8 +97,11 @@ function createRetryMockModel(
 
 			return {
 				content: [{type: 'text', text: successResponse}],
-				finishReason: 'stop',
-				usage: {inputTokens: 10, outputTokens: 10},
+				finishReason: {unified: 'stop', raw: undefined},
+				usage: {
+					inputTokens: {total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined},
+					outputTokens: {total: 10, text: undefined, reasoning: undefined},
+				},
 				rawCall: {rawPrompt: '', rawSettings: {}},
 				warnings: [],
 			};
@@ -173,16 +178,17 @@ test('translateMessages handles single message', async t => {
 // ============================================================================
 
 test('translateMessages processes large message sets in batches', async t => {
-	// Create 25 messages to trigger 3 batches (10 + 10 + 5)
+	const messageCount = 225;
+	// Create 225 messages to trigger 3 batches (100 + 100 + 25)
 	const messages: Record<string, string> = {};
-	for (let i = 0; i < 25; i++) {
+	for (let i = 0; i < messageCount; i++) {
 		messages[`key${i}`] = `Message ${i}`;
 	}
 
 	let batchCount = 0;
 
 	const mockModel = {
-		specificationVersion: 'v2',
+		specificationVersion: 'v3',
 		provider: 'mock',
 		modelId: 'mock-model',
 		supportedUrls: {},
@@ -198,8 +204,11 @@ test('translateMessages processes large message sets in batches', async t => {
 			]));
 			return {
 				content: [{type: 'text', text: JSON.stringify(translated)}],
-				finishReason: 'stop',
-				usage: {inputTokens: 10, outputTokens: 10},
+				finishReason: {unified: 'stop', raw: undefined},
+				usage: {
+					inputTokens: {total: 10, noCache: undefined, cacheRead: undefined, cacheWrite: undefined},
+					outputTokens: {total: 10, text: undefined, reasoning: undefined},
+				},
 				rawCall: {rawPrompt: '', rawSettings: {}},
 				warnings: [],
 			};
@@ -223,8 +232,8 @@ test('translateMessages processes large message sets in batches', async t => {
 	t.is(batchCount, 3);
 
 	// All messages should be translated
-	t.is(Object.keys(result).length, 25);
-	for (let i = 0; i < 25; i++) {
+	t.is(Object.keys(result).length, messageCount);
+	for (let i = 0; i < messageCount; i++) {
 		t.is(result[`key${i}`], `[DE] Message ${i}`);
 	}
 });
@@ -234,9 +243,10 @@ test('translateMessages processes large message sets in batches', async t => {
 // ============================================================================
 
 test('translateMessages calls onProgress callback after each batch', async t => {
-	// Create 15 messages to trigger 2 batches (10 + 5)
+	// Create 125 messages to trigger 2 batches (100 + 25)
+	const messageCount = 125;
 	const messages: Record<string, string> = {};
-	for (let i = 0; i < 15; i++) {
+	for (let i = 0; i < messageCount; i++) {
 		messages[`key${i}`] = `Message ${i}`;
 	}
 
@@ -270,11 +280,11 @@ test('translateMessages calls onProgress callback after each batch', async t => 
 	// Should have made 2 progress calls
 	t.is(progressCalls.length, 2);
 
-	// First batch: 10/15
-	t.deepEqual(progressCalls[0], {current: 10, total: 15});
+	// First batch: 100/125
+	t.deepEqual(progressCalls[0], {current: 100, total: 125});
 
-	// Second batch: 15/15
-	t.deepEqual(progressCalls[1], {current: 15, total: 15});
+	// Second batch: 125/125
+	t.deepEqual(progressCalls[1], {current: 125, total: 125});
 });
 
 test('translateMessages does not fail when onProgress is not provided', async t => {

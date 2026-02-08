@@ -1,4 +1,6 @@
-import {generateText, Output, type LanguageModel} from 'ai';
+import {
+	generateText, streamText, Output, type LanguageModel,
+} from 'ai';
 import {createGoogleGenerativeAI} from '@ai-sdk/google';
 import {createOpenAI} from '@ai-sdk/openai';
 import {createAnthropic} from '@ai-sdk/anthropic';
@@ -437,7 +439,7 @@ export async function adviseWebsite({
 		model,
 		prompt,
 		tools: {
-			url_context: google.tools.urlContext({}), // eslint-disable-line @typescript-eslint/naming-convention
+			url_context: google.tools.urlContext({}),
 		},
 	});
 
@@ -449,11 +451,149 @@ export async function adviseWebsite({
 		type: z.enum(['grammar', 'wording', 'phrasing']),
 	}));
 
-	const jsonMatch = result.text.match(/\[[\s\S]*\]/);
+	const jsonMatch = /\[[\s\S]*]/.exec(result.text);
 	if (!jsonMatch) {
 		return [];
 	}
 
 	const parsed = suggestionSchema.safeParse(JSON.parse(jsonMatch[0]));
 	return parsed.success ? parsed.data : [];
+}
+
+function tryParseJson(text: string): unknown {
+	try {
+		return JSON.parse(text) as unknown;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Incrementally parses a streaming JSON array, yielding each complete object as it appears.
+ * Handles strings with escaped characters and nested objects correctly.
+ */
+async function * parseStreamingJsonArray(textStream: AsyncIterable<string>): AsyncGenerator {
+	let inArray = false;
+	let depth = 0;
+	let inString = false;
+	let escaped = false;
+	let currentObject = '';
+
+	for await (const chunk of textStream) {
+		for (const char of chunk) {
+			if (escaped) {
+				escaped = false;
+				if (depth > 0) {
+					currentObject += char;
+				}
+
+				continue;
+			}
+
+			if (char === '\\' && inString) {
+				escaped = true;
+				if (depth > 0) {
+					currentObject += char;
+				}
+
+				continue;
+			}
+
+			if (char === '"') {
+				inString = !inString;
+				if (depth > 0) {
+					currentObject += char;
+				}
+
+				continue;
+			}
+
+			if (inString) {
+				if (depth > 0) {
+					currentObject += char;
+				}
+
+				continue;
+			}
+
+			if (char === '[' && !inArray) {
+				inArray = true;
+				continue;
+			}
+
+			if (!inArray) {
+				continue;
+			}
+
+			if (char === '{') {
+				depth++;
+				currentObject += char;
+				continue;
+			}
+
+			if (char === '}') {
+				depth--;
+				currentObject += char;
+				if (depth !== 0) {
+					continue;
+				}
+
+				const parsed = tryParseJson(currentObject);
+				if (parsed !== undefined) {
+					yield parsed;
+				}
+
+				currentObject = '';
+				continue;
+			}
+
+			if (depth > 0) {
+				currentObject += char;
+			}
+		}
+	}
+}
+
+/**
+ * Streaming version of adviseWebsite that yields individual suggestions as they're generated.
+ *
+ * Uses streaming text generation and incremental JSON parsing to emit suggestions
+ * one at a time, enabling progressive UI updates.
+ *
+ * @param options - Configuration options for the analysis
+ * @returns An async generator yielding individual revision suggestions
+ */
+export async function * adviseWebsiteStream({
+	websiteUrl,
+	errorTypes,
+	apiKey,
+	model: modelName,
+}: AdviseOptions): AsyncGenerator<RevisionSuggestion> {
+	const google = createGoogleGenerativeAI({apiKey});
+	const model = google(modelName);
+
+	const prompt = buildAdviseWebsitePrompt(errorTypes, websiteUrl);
+
+	const result = streamText({
+		model,
+		prompt,
+		tools: {
+			url_context: google.tools.urlContext({}),
+		},
+	});
+
+	const suggestionSchema = z.object({
+		key: z.string(),
+		original: z.string(),
+		suggested: z.string(),
+		reason: z.string(),
+		type: z.enum(['grammar', 'wording', 'phrasing']),
+	});
+
+	for await (const object of parseStreamingJsonArray(result.textStream)) {
+		const parsed = suggestionSchema.safeParse(object);
+		if (parsed.success) {
+			yield parsed.data;
+		}
+	}
 }

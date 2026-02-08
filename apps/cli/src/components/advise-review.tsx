@@ -80,26 +80,28 @@ export function AdviseReview({suggestions, onQuit, onSave}: Props) {
 				</Box>
 			</Box>
 
-			{isSaving ? (
-				<Box marginTop={1} flexDirection='column'>
-					<Text bold>Save to file:</Text>
-					<Box marginTop={1}>
-						<Text>Path: </Text>
-						<TextInput
-							value={savePath}
-							placeholder='./website_improvements.md'
-							onChange={setSavePath}
-							onSubmit={handleSaveSubmit}
-						/>
+			{isSaving
+				? (
+					<Box marginTop={1} flexDirection='column'>
+						<Text bold>Save to file:</Text>
+						<Box marginTop={1}>
+							<Text>Path: </Text>
+							<TextInput
+								value={savePath}
+								placeholder='./website_improvements.md'
+								onChange={setSavePath}
+								onSubmit={handleSaveSubmit}
+							/>
+						</Box>
 					</Box>
-				</Box>
-			) : (
-				<Box marginTop={1}>
-					<Text dimColor>
-						[↑/↓] Navigate  [S] Save to file  [Q] Quit
-					</Text>
-				</Box>
-			)}
+				)
+				: (
+					<Box marginTop={1}>
+						<Text dimColor>
+							[↑/↓] Navigate  [S] Save to file  [Q] Quit
+						</Text>
+					</Box>
+				)}
 		</Box>
 	);
 }

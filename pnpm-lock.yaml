@@ -44,7 +44,7 @@ importers:
 
   apps/cli:
     dependencies:
-      '@rire/core':
+      '@jive/core':
         specifier: workspace:*
         version: link:../../packages/core
       dotenv:
@@ -79,9 +79,9 @@ importers:
         specifier: ^5.0.3
         version: 5.9.3
 
-  apps/jive:
+  apps/web:
     dependencies:
-      '@rire/core':
+      '@jive/core':
         specifier: workspace:*
         version: link:../../packages/core
       react:

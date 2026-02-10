@@ -255,6 +255,8 @@ export type RevisionSuggestion = {
 	key: string;
 	/** Short description of where on the page the issue is found (advise only) */
 	section?: string | undefined;
+	/** How important this fix is (advise only) */
+	severity?: 'high' | 'medium' | 'low' | 'very low' | undefined;
 	/** The original message text */
 	original: string;
 	/** The suggested replacement text */
@@ -452,6 +454,7 @@ export async function adviseWebsite({
 		suggested: z.string(),
 		reason: z.string(),
 		type: z.enum(['grammar', 'wording', 'phrasing']),
+		severity: z.enum(['high', 'medium', 'low', 'very low']).optional(),
 	}));
 
 	const jsonMatch = /\[[\s\S]*]/.exec(result.text);
@@ -592,6 +595,7 @@ export async function * adviseWebsiteStream({
 		suggested: z.string(),
 		reason: z.string(),
 		type: z.enum(['grammar', 'wording', 'phrasing']),
+		severity: z.enum(['high', 'medium', 'low', 'very low']).optional(),
 	});
 
 	for await (const object of parseStreamingJsonArray(result.textStream)) {

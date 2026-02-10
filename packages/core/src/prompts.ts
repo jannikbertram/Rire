@@ -29,7 +29,7 @@ Important guidelines:
 - Suggest improvements that match the website's tone and purpose
 - Be concise in your reasoning
 - Use a descriptive key for each issue (e.g., "heading-1", "nav-about", "button-submit")
-- Group the results by error type so all grammar issues come first, then wording, then phrasing
+- Sort results by severity (high first), then group by error type within each severity level
 
 Respond with ONLY a JSON array of objects, each with these fields:
 - "key": descriptive label key
@@ -38,6 +38,7 @@ Respond with ONLY a JSON array of objects, each with these fields:
 - "suggested": your suggested replacement
 - "reason": brief explanation
 - "type": one of "grammar", "wording", or "phrasing"
+- "severity": one of "high", "medium", "low", or "very low" — rate how important this fix is
 
 If there are no issues, respond with an empty array: []`;
 }

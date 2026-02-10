@@ -4,6 +4,7 @@ import './app.css';
 import type {FormEvent} from 'react';
 
 type ErrorType = 'grammar' | 'wording' | 'phrasing';
+type Severity = 'high' | 'medium' | 'low' | 'very low';
 
 type RevisionSuggestion = {
 	key: string;
@@ -12,6 +13,7 @@ type RevisionSuggestion = {
 	suggested: string;
 	reason: string;
 	type: ErrorType;
+	severity?: Severity;
 };
 
 const errorTypeLabels: Record<ErrorType, string> = {
@@ -19,6 +21,18 @@ const errorTypeLabels: Record<ErrorType, string> = {
 	wording: 'Wording',
 	phrasing: 'Phrasing',
 };
+
+const severityLevels: Severity[] = ['very low', 'low', 'medium', 'high'];
+const severityLabels: Record<Severity, string> = {
+	'very low': 'Very low',
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High',
+};
+
+function severityRank(s: Severity): number {
+	return severityLevels.indexOf(s);
+}
 
 const loadingLabels = [
 	'Reading between the lines...',
@@ -53,6 +67,7 @@ function useLoadingLabel(active: boolean) {
 export function App() {
 	const [url, setUrl] = useState('');
 	const [errorTypes, setErrorTypes] = useState<Set<ErrorType>>(new Set(['grammar', 'wording', 'phrasing']));
+	const [minSeverity, setMinSeverity] = useState<Severity>('very low');
 	const [loading, setLoading] = useState(false);
 	const [suggestions, setSuggestions] = useState<RevisionSuggestion[] | undefined>();
 	const [error, setError] = useState<string | undefined>();
@@ -177,33 +192,50 @@ export function App() {
 							{loading ? 'Analyzing\u2026' : 'Analyze'}
 						</button>
 					</div>
-					<div className="flex gap-2 mb-3">
-						{(Object.entries(errorTypeLabels) as Array<[ErrorType, string]>).map(([type, label]) => (
-							<button
-								key={type}
-								type="button"
-								className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-									errorTypes.has(type)
-										? 'bg-zinc-800 border-zinc-700 text-zinc-200'
-										: 'bg-transparent border-zinc-800 text-zinc-500 hover:text-zinc-400'
-								}`}
-								disabled={loading}
-								onClick={() => {
-									setErrorTypes(prev => {
-										const next = new Set(prev);
-										if (next.has(type)) {
-											next.delete(type);
-										} else {
-											next.add(type);
-										}
+					<div className="flex items-center gap-4 mb-3">
+						<div className="flex gap-2">
+							{(Object.entries(errorTypeLabels) as Array<[ErrorType, string]>).map(([type, label]) => (
+								<button
+									key={type}
+									type="button"
+									className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+										errorTypes.has(type)
+											? 'bg-zinc-800 border-zinc-700 text-zinc-200'
+											: 'bg-transparent border-zinc-800 text-zinc-500 hover:text-zinc-400'
+									}`}
+									disabled={loading}
+									onClick={() => {
+										setErrorTypes(prev => {
+											const next = new Set(prev);
+											if (next.has(type)) {
+												next.delete(type);
+											} else {
+												next.add(type);
+											}
 
-										return next;
-									});
+											return next;
+										});
+									}}
+								>
+									{label}
+								</button>
+							))}
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-zinc-500">Min severity</span>
+							<select
+								className="px-2 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
+								value={minSeverity}
+								onChange={e => {
+									setMinSeverity(e.target.value as Severity);
 								}}
+								disabled={loading}
 							>
-								{label}
-							</button>
-						))}
+								{severityLevels.map(level => (
+									<option key={level} value={level}>{severityLabels[level]}</option>
+								))}
+							</select>
+						</div>
 					</div>
 				</form>
 
@@ -217,44 +249,64 @@ export function App() {
 					</div>
 				)}
 
-				{suggestions != null && (
-					suggestions.length === 0 && !loading
+				{suggestions != null && (() => {
+					const filtered = suggestions
+						.filter(s => severityRank(s.severity ?? 'high') >= severityRank(minSeverity))
+						.toSorted((a, b) => {
+							const bySeverity = severityRank(b.severity ?? 'high') - severityRank(a.severity ?? 'high');
+							if (bySeverity !== 0) return bySeverity;
+							return (a.type < b.type ? -1 : a.type > b.type ? 1 : 0);
+						});
+					return suggestions.length === 0 && !loading
 						? <p className="text-zinc-400 text-center py-12">No issues found.</p>
 						: suggestions.length > 0 && (
-							<div className="overflow-x-auto">
-								<table className="w-full text-sm text-left">
-									<thead>
-										<tr className="border-b border-zinc-800">
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Section</th>
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Type</th>
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Original</th>
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Suggested</th>
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Reason</th>
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-zinc-800">
-										{suggestions.map((s, i) => (
-											<tr key={i} className="group">
-												<td className="px-3 py-3 align-top text-zinc-400">{s.section}</td>
-												<td className="px-3 py-3 align-top">
-													<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize
-														${s.type === 'grammar' ? 'bg-red-500/10 text-red-500' : ''}
-														${s.type === 'wording' ? 'bg-amber-500/10 text-amber-500' : ''}
-														${s.type === 'phrasing' ? 'bg-indigo-500/10 text-indigo-500' : ''}
-													`}>
-														{s.type}
-													</span>
-												</td>
-												<td className="px-3 py-3 align-top text-zinc-300">{s.original}</td>
-												<td className="px-3 py-3 align-top text-zinc-300">{s.suggested}</td>
-												<td className="px-3 py-3 align-top text-zinc-400">{s.reason}</td>
+							filtered.length === 0
+								? <p className="text-zinc-400 text-center py-12">No issues match the current severity filter.</p>
+								: <div className="overflow-x-auto">
+									<table className="w-full text-sm text-left">
+										<thead>
+											<tr className="border-b border-zinc-800">
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Section</th>
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Severity</th>
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Type</th>
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Original</th>
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Suggested</th>
+												<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Reason</th>
 											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						)
-				)}
+										</thead>
+										<tbody className="divide-y divide-zinc-800">
+											{filtered.map((s, i) => (
+												<tr key={i} className="group">
+													<td className="px-3 py-3 align-top text-zinc-400">{s.section}</td>
+													<td className="px-3 py-3 align-top">
+														<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize
+															${s.severity === 'high' ? 'bg-red-500/10 text-red-500' : ''}
+															${s.severity === 'medium' ? 'bg-amber-500/10 text-amber-500' : ''}
+															${s.severity === 'low' ? 'bg-blue-500/10 text-blue-500' : ''}
+															${s.severity === 'very low' ? 'bg-zinc-500/10 text-zinc-400' : ''}
+														`}>
+															{s.severity ?? 'unknown'}
+														</span>
+													</td>
+													<td className="px-3 py-3 align-top">
+														<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize
+															${s.type === 'grammar' ? 'bg-red-500/10 text-red-500' : ''}
+															${s.type === 'wording' ? 'bg-amber-500/10 text-amber-500' : ''}
+															${s.type === 'phrasing' ? 'bg-indigo-500/10 text-indigo-500' : ''}
+														`}>
+															{s.type}
+														</span>
+													</td>
+													<td className="px-3 py-3 align-top text-zinc-300">{s.original}</td>
+													<td className="px-3 py-3 align-top text-zinc-300">{s.suggested}</td>
+													<td className="px-3 py-3 align-top text-zinc-400">{s.reason}</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+						);
+				})()}
 				{!loading && sitemapLoading && (
 					<p className="text-zinc-500 text-sm mt-6 animate-pulse">Looking for other pages...</p>
 				)}

@@ -7,6 +7,7 @@ type ErrorType = 'grammar' | 'wording' | 'phrasing';
 
 type RevisionSuggestion = {
 	key: string;
+	section?: string;
 	original: string;
 	suggested: string;
 	reason: string;
@@ -224,7 +225,7 @@ export function App() {
 								<table className="w-full text-sm text-left">
 									<thead>
 										<tr className="border-b border-zinc-800">
-											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Key</th>
+											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Section</th>
 											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Type</th>
 											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Original</th>
 											<th className="px-3 py-3 text-zinc-400 font-medium text-xs uppercase tracking-wider">Suggested</th>
@@ -234,9 +235,7 @@ export function App() {
 									<tbody className="divide-y divide-zinc-800">
 										{suggestions.map((s, i) => (
 											<tr key={i} className="group">
-												<td className="px-3 py-3 align-top">
-													<code className="font-mono text-xs bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-300 border border-zinc-800">{s.key}</code>
-												</td>
+												<td className="px-3 py-3 align-top text-zinc-400">{s.section}</td>
 												<td className="px-3 py-3 align-top">
 													<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize
 														${s.type === 'grammar' ? 'bg-red-500/10 text-red-500' : ''}

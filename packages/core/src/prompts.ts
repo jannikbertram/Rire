@@ -29,9 +29,11 @@ Important guidelines:
 - Suggest improvements that match the website's tone and purpose
 - Be concise in your reasoning
 - Use a descriptive key for each issue (e.g., "heading-1", "nav-about", "button-submit")
+- Group the results by error type so all grammar issues come first, then wording, then phrasing
 
 Respond with ONLY a JSON array of objects, each with these fields:
 - "key": descriptive label key
+- "section": short description of where on the page the issue is found (e.g., "Hero section", "Navigation", "Footer", "Pricing table")
 - "original": the original text
 - "suggested": your suggested replacement
 - "reason": brief explanation

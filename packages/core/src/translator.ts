@@ -253,6 +253,8 @@ export async function translateMessages({
 export type RevisionSuggestion = {
 	/** The message key that has an issue */
 	key: string;
+	/** Short description of where on the page the issue is found (advise only) */
+	section?: string | undefined;
 	/** The original message text */
 	original: string;
 	/** The suggested replacement text */
@@ -445,6 +447,7 @@ export async function adviseWebsite({
 
 	const suggestionSchema = z.array(z.object({
 		key: z.string(),
+		section: z.string().optional(),
 		original: z.string(),
 		suggested: z.string(),
 		reason: z.string(),
@@ -584,6 +587,7 @@ export async function * adviseWebsiteStream({
 
 	const suggestionSchema = z.object({
 		key: z.string(),
+		section: z.string().optional(),
 		original: z.string(),
 		suggested: z.string(),
 		reason: z.string(),

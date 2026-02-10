@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 			try {
 				for await (const suggestion of adviseWebsiteStream({
 					websiteUrl: url,
-					errorTypes: ['grammar', 'wording', 'phrasing'],
+					errorTypes: body.errorTypes ?? ['grammar', 'wording', 'phrasing'],
 					apiKey,
 					model: 'gemini-2.5-flash',
 				})) {

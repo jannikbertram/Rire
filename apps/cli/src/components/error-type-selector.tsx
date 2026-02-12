@@ -6,11 +6,7 @@ type Props = {
 	readonly onSubmit: (errorTypes: RevisionErrorType[]) => void;
 };
 
-const errorTypeItems: Array<{value: RevisionErrorType; label: string; description: string}> = [
-	{value: 'grammar', label: REVISION_ERROR_TYPES.grammar.label, description: REVISION_ERROR_TYPES.grammar.description},
-	{value: 'wording', label: REVISION_ERROR_TYPES.wording.label, description: REVISION_ERROR_TYPES.wording.description},
-	{value: 'phrasing', label: REVISION_ERROR_TYPES.phrasing.label, description: REVISION_ERROR_TYPES.phrasing.description},
-];
+const errorTypeItems = (Object.entries(REVISION_ERROR_TYPES) as Array<[RevisionErrorType, {label: string; description: string}]>).map(([value, info]) => ({value, label: info.label, description: info.description}));
 
 /**
  * Multi-select component for choosing which error types to include in revision.

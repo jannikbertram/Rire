@@ -46,7 +46,7 @@ function parseErrorTypes(errorTypesOption: string | undefined): RevisionErrorTyp
 		return undefined;
 	}
 
-	const validTypes = new Set<RevisionErrorType>(['grammar', 'wording', 'phrasing']);
+	const validTypes = new Set<RevisionErrorType>(['spelling', 'grammar', 'inconsistency', 'wordiness', 'ai-tone', 'ambiguity', 'seo']);
 	const parsed = errorTypesOption.split(',').map(s => s.trim().toLowerCase());
 	const filtered = parsed.filter((t): t is RevisionErrorType => validTypes.has(t as RevisionErrorType));
 	return filtered.length > 0 ? filtered : undefined;

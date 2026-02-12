@@ -3,7 +3,7 @@ import './app.css';
 
 import type {FormEvent} from 'react';
 
-type ErrorType = 'grammar' | 'wording' | 'phrasing';
+type ErrorType = 'spelling' | 'grammar' | 'inconsistency' | 'wordiness' | 'ai-tone' | 'ambiguity' | 'seo' | 'geo';
 type Severity = 'high' | 'medium' | 'low' | 'very low';
 
 type RevisionSuggestion = {
@@ -16,11 +16,18 @@ type RevisionSuggestion = {
 	severity?: Severity;
 };
 
-const errorTypeLabels: Record<ErrorType, string> = {
-	grammar: 'Grammar',
-	wording: 'Wording',
-	phrasing: 'Phrasing',
+type ToggleGroup = {
+	label: string;
+	types: ErrorType[];
 };
+
+const toggleGroups: ToggleGroup[] = [
+	{label: 'Spelling & Grammar', types: ['spelling', 'grammar']},
+	{label: 'Style', types: ['wordiness', 'ai-tone']},
+	{label: 'Clarity', types: ['ambiguity', 'inconsistency']},
+	{label: 'SEO', types: ['seo']},
+	{label: 'GEO', types: ['geo']},
+];
 
 const severityLevels: Severity[] = ['very low', 'low', 'medium', 'high'];
 const severityLabels: Record<Severity, string> = {
@@ -66,7 +73,7 @@ function useLoadingLabel(active: boolean) {
 
 export function App() {
 	const [url, setUrl] = useState('');
-	const [errorTypes, setErrorTypes] = useState<Set<ErrorType>>(new Set(['grammar', 'wording', 'phrasing']));
+	const [errorTypes, setErrorTypes] = useState<Set<ErrorType>>(new Set(toggleGroups.flatMap(g => g.types)));
 	const [minSeverity, setMinSeverity] = useState<Severity>('very low');
 	const [loading, setLoading] = useState(false);
 	const [suggestions, setSuggestions] = useState<RevisionSuggestion[] | undefined>();
@@ -194,32 +201,35 @@ export function App() {
 					</div>
 					<div className="flex items-center gap-4 mb-3">
 						<div className="flex gap-2">
-							{(Object.entries(errorTypeLabels) as Array<[ErrorType, string]>).map(([type, label]) => (
-								<button
-									key={type}
-									type="button"
-									className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-										errorTypes.has(type)
-											? 'bg-zinc-800 border-zinc-700 text-zinc-200'
-											: 'bg-transparent border-zinc-800 text-zinc-500 hover:text-zinc-400'
-									}`}
-									disabled={loading}
-									onClick={() => {
-										setErrorTypes(prev => {
-											const next = new Set(prev);
-											if (next.has(type)) {
-												next.delete(type);
-											} else {
-												next.add(type);
-											}
+							{toggleGroups.map(group => {
+								const active = group.types.every(t => errorTypes.has(t));
+								return (
+									<button
+										key={group.label}
+										type="button"
+										className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+											active
+												? 'bg-zinc-800 border-zinc-700 text-zinc-200'
+												: 'bg-transparent border-zinc-800 text-zinc-500 hover:text-zinc-400'
+										}`}
+										disabled={loading}
+										onClick={() => {
+											setErrorTypes(prev => {
+												const next = new Set(prev);
+												if (active) {
+													for (const t of group.types) next.delete(t);
+												} else {
+													for (const t of group.types) next.add(t);
+												}
 
-											return next;
-										});
-									}}
-								>
-									{label}
-								</button>
-							))}
+												return next;
+											});
+										}}
+									>
+										{group.label}
+									</button>
+								);
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<span className="text-xs text-zinc-500">Min severity</span>
@@ -289,10 +299,12 @@ export function App() {
 														</span>
 													</td>
 													<td className="px-3 py-3 align-top">
-														<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize
-															${s.type === 'grammar' ? 'bg-red-500/10 text-red-500' : ''}
-															${s.type === 'wording' ? 'bg-amber-500/10 text-amber-500' : ''}
-															${s.type === 'phrasing' ? 'bg-indigo-500/10 text-indigo-500' : ''}
+														<span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium
+															${s.type === 'spelling' || s.type === 'grammar' ? 'bg-red-500/10 text-red-500' : ''}
+															${s.type === 'inconsistency' ? 'bg-orange-500/10 text-orange-500' : ''}
+															${s.type === 'wordiness' || s.type === 'ai-tone' ? 'bg-amber-500/10 text-amber-500' : ''}
+															${s.type === 'ambiguity' ? 'bg-indigo-500/10 text-indigo-500' : ''}
+															${s.type === 'seo' || s.type === 'geo' ? 'bg-emerald-500/10 text-emerald-500' : ''}
 														`}>
 															{s.type}
 														</span>

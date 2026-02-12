@@ -5,7 +5,9 @@ import {createGoogleGenerativeAI} from '@ai-sdk/google';
 import {createOpenAI} from '@ai-sdk/openai';
 import {createAnthropic} from '@ai-sdk/anthropic';
 import {z} from 'zod';
-import {TRANSLATION_BATCH_SIZE, REVISION_BATCH_SIZE, type RevisionErrorType} from './consts.js';
+import {
+	TRANSLATION_BATCH_SIZE, REVISION_BATCH_SIZE, REVISION_ERROR_TYPES, type RevisionErrorType,
+} from './consts.js';
 import {
 	buildSystemPrompt, buildTranslationPrompt, buildRevisionSystemPrompt, buildRevisionPrompt,
 	buildAdviseWebsitePrompt,
@@ -362,7 +364,7 @@ export async function reviseMessages({
 		original: z.string().describe('The original text'),
 		suggested: z.string().describe('The suggested replacement'),
 		reason: z.string().describe('Brief explanation for the suggestion'),
-		type: z.enum(['grammar', 'wording', 'phrasing']).describe('The type of issue'),
+		type: z.enum(Object.keys(REVISION_ERROR_TYPES) as [RevisionErrorType, ...RevisionErrorType[]]).describe('The type of issue'),
 	});
 
 	const revisionsSchema = z.array(suggestionSchema);
@@ -453,7 +455,7 @@ export async function adviseWebsite({
 		original: z.string(),
 		suggested: z.string(),
 		reason: z.string(),
-		type: z.enum(['grammar', 'wording', 'phrasing']),
+		type: z.enum(Object.keys(REVISION_ERROR_TYPES) as [RevisionErrorType, ...RevisionErrorType[]]),
 		severity: z.enum(['high', 'medium', 'low', 'very low']).optional(),
 	}));
 
@@ -594,7 +596,7 @@ export async function * adviseWebsiteStream({
 		original: z.string(),
 		suggested: z.string(),
 		reason: z.string(),
-		type: z.enum(['grammar', 'wording', 'phrasing']),
+		type: z.enum(Object.keys(REVISION_ERROR_TYPES) as [RevisionErrorType, ...RevisionErrorType[]]),
 		severity: z.enum(['high', 'medium', 'low', 'very low']).optional(),
 	});
 
